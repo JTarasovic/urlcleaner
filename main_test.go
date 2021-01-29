@@ -1,51 +1,49 @@
 package main
 
 import (
+	"fmt"
+	"net/url"
 	"testing"
 
+	"github.com/gobwas/glob"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCleanURL(t *testing.T) {
+func TestFilterQueryParams(t *testing.T) {
 	var testCases = []struct {
+		name     string
 		url      string
-		expected string
+		expected map[string]string
 	}{
 		{
-			url:      "https://example.com",
-			expected: "https://example.com",
+			name: "no params",
+			url:  "https://example.com",
+			expected: map[string]string{
+				"*":           "https://example.com",
+				"utm*":        "https://example.com",
+				"doesntmatch": "https://example.com",
+			},
 		},
 		{
-			url:      "http://feedproxy.google.com/~r/ServeTheHome/~3/Lj0FaF7ZHcQ/",
-			expected: "https://www.servethehome.com/microchip-nvme-sas-4-sata-smartroc-3200-smartioc-2200-launched/",
+			name: "utm params",
+			url:  "https://www.servethehome.com/server-industry-takeaways-from-intel-q4-2020-earnings/?utm_source=feedburner&utm_medium=feed&utm_campaign=Feed%3A+ServeTheHome+%28ServeTheHome.com%29",
+			expected: map[string]string{
+				"*":    "https://www.servethehome.com/server-industry-takeaways-from-intel-q4-2020-earnings/",
+				"utm*": "https://www.servethehome.com/server-industry-takeaways-from-intel-q4-2020-earnings/",
+				// params are re-writen in order regardless of match
+				"*doesntmatch": "https://www.servethehome.com/server-industry-takeaways-from-intel-q4-2020-earnings/?utm_campaign=Feed%3A+ServeTheHome+%28ServeTheHome.com%29&utm_medium=feed&utm_source=feedburner",
+			},
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run("invalid", func(t *testing.T) {
-			actual, err := cleanURL(tc.url)
-			assert.Nil(t, err)
-			assert.Equal(t, tc.expected, actual)
-		})
-	}
-}
-func TestMain_invalid(t *testing.T) {
-	var testCases = []struct {
-		url string
-	}{
-		{
-			url: "not a real url",
-		},
-		{
-			url: "https://ihopeandpraytothetestinggodsthatthisurldoesntexist.tld",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run("invalid", func(t *testing.T) {
-			actual, err := cleanURL(tc.url)
-			assert.Equal(t, "", actual)
-			assert.NotNil(t, err)
-		})
+		for glb, expected := range tc.expected {
+			t.Run(fmt.Sprintf("%s %s", tc.name, glb), func(t *testing.T) {
+				u, err := url.Parse(tc.url)
+				assert.Nil(t, err)
+				filterQueryParams(u, glob.MustCompile(glb))
+				assert.Equal(t, expected, u.String(), "failed for glob: %s", glb)
+			})
+		}
 	}
 }

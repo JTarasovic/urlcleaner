@@ -1,38 +1,65 @@
 package main
 
 import (
+	"bufio"
+	"flag"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/gobwas/glob"
 )
 
+const (
+	defaultGlob = "*"
+	defaultURL  = "-"
+)
+
+var globFlag, urlFlag string
+
 func main() {
-	// TODO: better argument handling / flag parsing
-	out, err := cleanURL(os.Args[1])
+	flag.StringVar(&globFlag, "glob", defaultGlob, "the glob used to determine which query params to filter/remove")
+	flag.StringVar(&urlFlag, "url", defaultURL, "the URL to filter. `-` for stdin")
+	flag.Parse()
+
+	urlToUse := urlFlag
+	if urlFlag == defaultURL {
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		if err := scanner.Err(); err != nil {
+			panic(err)
+		}
+		urlToUse = scanner.Text()
+	}
+
+	u, g, err := prepare(urlToUse, globFlag)
 	if err != nil {
-		// TODO: better error handling
 		panic(err)
 	}
-
-	fmt.Fprint(os.Stdout, out)
-	os.Exit(0)
+	filterQueryParams(u, g)
+	fmt.Fprintln(os.Stdout, u)
 }
 
-func cleanURL(s string) (string, error) {
-	parsed, err := url.Parse(s)
+func prepare(s, glb string) (*url.URL, glob.Glob, error) {
+	u, err := url.Parse(s)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-	resp, err := http.Head(formatURL(parsed))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
 
-	return formatURL(resp.Request.URL), nil
+	g, err := glob.Compile(globFlag)
+	if err != nil {
+		return nil, nil, err
+	}
+	return u, g, nil
 }
 
-func formatURL(u *url.URL) string {
-	return fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+func filterQueryParams(u *url.URL, g glob.Glob) {
+	q := u.Query()
+	for k := range q {
+		if g.Match(k) {
+			q.Del(k)
+		}
+	}
+	// set the raw query to the filtered set of query params
+	u.RawQuery = q.Encode()
 }
