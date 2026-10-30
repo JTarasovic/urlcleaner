@@ -1,9 +1,9 @@
 module github.com/jtarasovic/urlcleaner
 
-go 1.22.0
+go 1.24.0
 
 require (
-	github.com/gobwas/glob v1.0.0
+	github.com/gobwas/glob v1.1.0
 	github.com/stretchr/testify v1.12.1
 )
 
